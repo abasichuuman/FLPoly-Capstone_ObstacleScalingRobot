@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Robot Data Link</title>
+    <style>
+        body { font-family: Arial; text-align: center; margin-top: 50px; background: #1a1a1a; color: white; }
+        #status { font-size: 24px; color: yellow; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Robot Data Link</h1>
+    <p id="status">Connecting to Matchmaker...</p>
+    <script>
+        const ws = new WebSocket('ws://100.70.66.123:8765');
+        let pc = new RTCPeerConnection();
+        let dc = pc.createDataChannel("robot-link");
+
+        dc.onopen = () => {
+            document.getElementById('status').innerText = "WebRTC LINK ACTIVE!";
+            document.getElementById('status').style.color = "#00ff00";
+            dc.send("System Check from Laptop");
+        };
+
+        ws.onopen = async () => {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.send(JSON.stringify({ sdp: pc.localDescription }));
+        };
+
+        ws.onmessage = async (event) => {
+            const message = JSON.parse(event.data);
+            if (message.sdp) {
+                await pc.setRemoteDescription(new RTCSessionDescription(message.sdp));
+            } else if (message.ice) {
+                await pc.addIceCandidate(new RTCIceCandidate(message.ice));
+            }
+        };
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                ws.send(JSON.stringify({ ice: event.candidate }));
+            }
+        };
+    </script>
+</body>
+</html>
