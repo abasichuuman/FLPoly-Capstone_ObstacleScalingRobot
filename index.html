@@ -1,46 +1,209 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Robot Data Link</title>
+    <title>Robot Control</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial; text-align: center; margin-top: 50px; background: #1a1a1a; color: white; }
-        #status { font-size: 24px; color: yellow; font-weight: bold; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: #0d0d0d;
+            color: #e8e8e8;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            padding: 1.25rem 2rem;
+            border-bottom: 1px solid #1f1f1f;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            font-family: 'DM Mono', monospace;
+            font-size: 13px;
+            letter-spacing: 0.08em;
+            color: #888;
+            text-transform: uppercase;
+        }
+        #status {
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            letter-spacing: 0.06em;
+            padding: 6px 14px;
+            border-radius: 100px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            color: #f5c518;
+            transition: all 0.3s ease;
+        }
+        #status.active {
+            color: #4caf82;
+            border-color: #1d3d2c;
+            background: #0f2219;
+        }
+        main {
+            flex: 1;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        .video-container {
+            position: relative;
+            background: #111;
+            border-radius: 12px;
+            border: 1px solid #1f1f1f;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+        }
+        #remoteVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .video-overlay {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: #888;
+            letter-spacing: 0.05em;
+        }
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        button {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid #2a2a2a;
+            background: #161616;
+            color: #ccc;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            letter-spacing: 0.02em;
+        }
+        button:hover {
+            background: #1f1f1f;
+            border-color: #3a3a3a;
+            color: #e8e8e8;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        .cam-label {
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            color: #555;
+            margin-left: auto;
+        }
+        audio { display: none; }
     </style>
 </head>
 <body>
-    <h1>Robot Data Link</h1>
-    <p id="status">Connecting to Matchmaker...</p>
+    <header>
+        <span class="logo">Robot // Control</span>
+        <span id="status">Connecting...</span>
+    </header>
+
+    <main>
+        <div class="video-container">
+            <video id="remoteVideo" autoplay playsinline muted></video>
+            <div class="video-overlay" id="camLabel">CAM 1</div>
+        </div>
+
+        <div class="controls">
+            <button onclick="switchCamera()">Switch Camera</button>
+            <span class="cam-label" id="camInfo">Primary</span>
+        </div>
+    </main>
+
+    <audio id="remoteAudio" autoplay></audio>
+
     <script>
-        const ws = new WebSocket('ws://100.70.66.123:8765');
-        let pc = new RTCPeerConnection();
-        let dc = pc.createDataChannel("robot-link");
+        const MATCHMAKER = 'ws://100.127.202.118:8765';
+        const CAM_NAMES = ['Claw', 'Primary', 'Rear'];
+        let ws, pc, dc;
+        let currentCam = 1;
+        const totalCams = 3;
 
-        dc.onopen = () => {
-            document.getElementById('status').innerText = "WebRTC LINK ACTIVE!";
-            document.getElementById('status').style.color = "#00ff00";
-            dc.send("System Check from Laptop");
-        };
+        function setStatus(text, active = false) {
+            const el = document.getElementById('status');
+            el.textContent = text;
+            el.className = active ? 'active' : '';
+        }
 
-        ws.onopen = async () => {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            ws.send(JSON.stringify({ sdp: pc.localDescription }));
-        };
-
-        ws.onmessage = async (event) => {
-            const message = JSON.parse(event.data);
-            if (message.sdp) {
-                await pc.setRemoteDescription(new RTCSessionDescription(message.sdp));
-            } else if (message.ice) {
-                await pc.addIceCandidate(new RTCIceCandidate(message.ice));
+        function switchCamera() {
+            currentCam = (currentCam + 1) % totalCams;
+            document.getElementById('camLabel').textContent = `CAM ` + currentCam;
+            document.getElementById('camInfo').textContent = CAM_NAMES[currentCam];
+            if (dc && dc.readyState === 'open') {
+                dc.send(JSON.stringify({ action: 'switch_camera', camera: currentCam }));
             }
-        };
+        }
 
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                ws.send(JSON.stringify({ ice: event.candidate }));
-            }
-        };
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'c' || e.key === 'C') switchCamera();
+        });
+
+        function connect() {
+            ws = new WebSocket(MATCHMAKER);
+            pc = new RTCPeerConnection();
+            dc = pc.createDataChannel('robot-link');
+
+            dc.onopen = () => setStatus('Link Active', true);
+            dc.onclose = () => setStatus('Disconnected');
+
+            ws.onopen = async () => {
+                setStatus('Waiting for robot...');
+                await new Promise(r => setTimeout(r, 500));
+                pc.addTransceiver('video', { direction: 'recvonly' });
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                ws.send(JSON.stringify({ sdp: pc.localDescription }));
+            };
+
+            ws.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.sdp) await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                else if (msg.ice) await pc.addIceCandidate(new RTCIceCandidate(msg.ice));
+            };
+
+            pc.onicecandidate = (e) => {
+                if (e.candidate) ws.send(JSON.stringify({ ice: e.candidate }));
+            };
+
+            pc.ontrack = (event) => {
+                const track = event.track;
+                if (track.kind === 'video') {
+                    const vid = document.getElementById('remoteVideo');
+                    vid.srcObject = new MediaStream([track]);
+                    vid.play().catch(() => {});
+                } else if (track.kind === 'audio') {
+                    const aud = document.getElementById('remoteAudio');
+                    aud.srcObject = new MediaStream([track]);
+                    aud.play().catch(() => {});
+                }
+            };
+
+            ws.onclose = () => {
+                setStatus('Reconnecting...');
+                setTimeout(connect, 2000);
+            };
+        }
+
+        connect();
     </script>
 </body>
 </html>
