@@ -1,5 +1,6 @@
 import cv2
 from picamera2 import Picamera2
+from picamera2 import controls
 
 def main():
     primaryCam = Picamera2(0)
@@ -13,6 +14,9 @@ def main():
 
     primaryCam.start()
     rearCam.start()
+
+    primaryCam.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+    primaryCam.autofocus_cycle()
 
     active = 1
 
